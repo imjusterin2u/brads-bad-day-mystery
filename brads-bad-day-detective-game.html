@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Case File: Brad's Bad Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Libre+Franklin:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --ink:#1b1f2a;
+    --ink2:#242a38;
+    --paper:#ece3cd;
+    --paper-dark:#d8cba8;
+    --paper-line:#b8a97e;
+    --red:#a3312a;
+    --red-dark:#7c231d;
+    --brass:#c8a04d;
+    --chalk:#f4efe1;
+    --pencil:#332f28;
+    --green:#3f6b4a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse at 20% -10%, #2a3142 0%, transparent 60%),
+      repeating-linear-gradient(45deg, #191d27 0px, #191d27 2px, #1b1f2a 2px, #1b1f2a 4px);
+    color:var(--chalk);
+    font-family:'Libre Franklin', sans-serif;
+    min-height:100vh;
+  }
+  .type{font-family:'Special Elite', monospace; letter-spacing:0.5px;}
+  #app{max-width:920px; margin:0 auto; padding:18px 16px 60px;}
+
+  /* ---- header / corkboard ---- */
+  .masthead{text-align:center; padding:18px 0 8px;}
+  .masthead .badge{
+    font-family:'Special Elite',monospace;
+    font-size:12px; letter-spacing:3px; color:var(--brass);
+    border:1px solid var(--brass); border-radius:20px;
+    display:inline-block; padding:4px 14px; margin-bottom:10px;
+  }
+  .masthead h1{
+    font-family:'Special Elite',monospace;
+    font-size:clamp(24px,5vw,38px);
+    margin:0; color:var(--chalk);
+    text-shadow:2px 2px 0 var(--red-dark);
+  }
+  .masthead p{color:#a8a190; margin:6px 0 0; font-size:14px;}
+
+  .corkboard{
+    display:flex; gap:6px; margin:18px 0 22px; flex-wrap:wrap; justify-content:center;
+  }
+  .tab{
+    flex:1; min-width:90px;
+    background:var(--paper); color:var(--pencil);
+    border-radius:6px 6px 2px 2px;
+    padding:8px 6px 10px; text-align:center;
+    font-size:11px; font-weight:700; position:relative;
+    border:1px solid var(--paper-line);
+    opacity:0.45;
+  }
+  .tab.active{opacity:1; box-shadow:0 4px 12px rgba(0,0,0,0.4); transform:translateY(-3px);}
+  .tab.done{opacity:0.85;}
+  .tab .pin{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--red); display:inline-block; margin-right:4px;
+    box-shadow:0 0 0 2px rgba(0,0,0,0.15) inset;
+  }
+  .tab .stamp{
+    position:absolute; top:-8px; right:-6px; font-size:16px;
+  }
+
+  .race-bar{max-width:920px; margin:0 auto 18px; display:flex; gap:10px;}
+  .race-card{
+    flex:1; background:var(--ink2); border:1px solid #3a4258; border-radius:10px;
+    padding:10px 12px;
+  }
+  .race-card .name{font-weight:700; font-size:13px; display:flex; justify-content:space-between;}
+  .race-card .score{color:var(--brass); font-family:'Special Elite',monospace;}
+  .progress-track{height:8px; background:#111420; border-radius:6px; margin-top:8px; overflow:hidden;}
+  .progress-fill{height:100%; background:linear-gradient(90deg,var(--red),var(--brass)); transition:width .5s ease;}
+
+  /* ---- card / panel ---- */
+  .panel{
+    background:var(--paper); color:var(--pencil);
+    border-radius:10px; padding:24px 22px; position:relative;
+    box-shadow:0 10px 30px rgba(0,0,0,0.45);
+    background-image: linear-gradient(var(--paper-line) 1px, transparent 1px);
+    background-size: 100% 28px;
+  }
+  .panel h2{font-family:'Special Elite',monospace; margin-top:0; color:var(--red-dark); font-size:20px;}
+  .clue-quote{
+    background:rgba(255,255,255,0.5); border-left:4px solid var(--red);
+    padding:10px 14px; font-style:italic; margin:14px 0; border-radius:0 6px 6px 0;
+  }
+  .question-prompt{font-size:18px; font-weight:700; margin:8px 0 18px;}
+  .options{display:grid; gap:10px;}
+  .opt-btn{
+    text-align:left; padding:12px 14px; border-radius:8px;
+    border:2px solid var(--paper-line); background:#fbf7ec; color:var(--pencil);
+    font-size:15px; cursor:pointer; font-family:'Libre Franklin',sans-serif; font-weight:600;
+    transition:all .15s ease;
+  }
+  .opt-btn:hover{border-color:var(--brass); transform:translateX(2px);}
+  .opt-btn.correct{background:#dcebe0; border-color:var(--green); color:var(--green);}
+  .opt-btn.wrong{background:#f3dcda; border-color:var(--red); color:var(--red-dark);}
+  .opt-btn:disabled{cursor:default;}
+
+  .timer-wrap{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .timer-ring{
+    width:34px; height:34px; border-radius:50%;
+    border:4px solid var(--red); display:flex; align-items:center; justify-content:center;
+    font-family:'Special Elite',monospace; font-size:13px; font-weight:700; color:var(--red-dark);
+    flex-shrink:0;
+  }
+
+  .spell-word-btn{
+    font-size:22px; padding:10px 22px; border-radius:8px; border:2px solid var(--brass);
+    background:var(--ink); color:var(--chalk); cursor:pointer; font-family:'Special Elite',monospace;
+  }
+  .spell-input{
+    width:100%; font-size:20px; padding:12px 14px; border-radius:8px; border:2px solid var(--paper-line);
+    font-family:'Special Elite',monospace; letter-spacing:2px; text-transform:lowercase;
+    margin:14px 0;
+  }
+  .btn{
+    background:var(--red); color:var(--chalk); border:none; border-radius:8px;
+    padding:12px 20px; font-size:15px; font-weight:700; cursor:pointer;
+    font-family:'Libre Franklin',sans-serif;
+  }
+  .btn:hover{background:var(--red-dark);}
+  .btn.ghost{background:transparent; border:2px solid var(--pencil); color:var(--pencil);}
+  .btn:disabled{opacity:0.4; cursor:default;}
+
+  .seq-list{list-style:none; padding:0; margin:14px 0; display:grid; gap:8px;}
+  .seq-item{
+    background:#fbf7ec; border:2px solid var(--paper-line); border-radius:8px;
+    padding:10px 12px; display:flex; align-items:center; gap:10px; cursor:grab; font-weight:600;
+  }
+  .seq-item.dragging{opacity:0.4;}
+  .seq-item .num{
+    width:24px; height:24px; border-radius:50%; background:var(--ink); color:var(--chalk);
+    display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0;
+  }
+
+  .stamp-fx{
+    position:fixed; top:40%; left:50%; transform:translate(-50%,-50%) rotate(-12deg) scale(0.5);
+    font-family:'Special Elite',monospace; font-size:52px; font-weight:700;
+    border:6px solid; border-radius:10px; padding:6px 24px; opacity:0;
+    pointer-events:none; z-index:50;
+  }
+  .stamp-fx.show{animation:stampIn .55s ease forwards;}
+  @keyframes stampIn{
+    0%{opacity:0; transform:translate(-50%,-50%) rotate(-12deg) scale(2.2);}
+    60%{opacity:1; transform:translate(-50%,-50%) rotate(-12deg) scale(0.9);}
+    100%{opacity:1; transform:translate(-50%,-50%) rotate(-12deg) scale(1);}
+  }
+  .stamp-fx.correct{color:var(--green); border-color:var(--green);}
+  .stamp-fx.wrong{color:var(--red); border-color:var(--red);}
+
+  .center{text-align:center;}
+  input[type=text]{
+    font-size:16px; padding:10px 12px; border-radius:8px; border:2px solid var(--paper-line);
+    font-family:'Libre Franklin',sans-serif; width:100%; margin:6px 0 14px;
+  }
+  .row{display:flex; gap:10px; flex-wrap:wrap;}
+  .row > *{flex:1;}
+  .small{font-size:13px; color:#6b6555;}
+  .final-board{display:grid; gap:12px; grid-template-columns:1fr 1fr;}
+  @media(max-width:640px){.final-board{grid-template-columns:1fr;}}
+  .final-card{background:#fbf7ec; border:2px solid var(--brass); border-radius:10px; padding:16px; text-align:center;}
+  .final-card .big{font-family:'Special Elite',monospace; font-size:34px; color:var(--red-dark);}
+  .teacher-toggle{
+    position:fixed; bottom:14px; right:14px; background:var(--ink2); color:var(--chalk);
+    border:1px solid var(--brass); border-radius:20px; padding:8px 14px; font-size:12px; cursor:pointer;
+    opacity:0.6;
+  }
+  .modal-bg{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center;
+    justify-content:center; z-index:60; padding:16px;
+  }
+  .modal{background:var(--paper); color:var(--pencil); border-radius:10px; padding:20px; max-width:480px; width:100%; max-height:85vh; overflow:auto;}
+  .link{color:#6b4b1f;}
+  .wsc{display:inline-block; background:var(--ink); color:var(--brass); border-radius:5px; padding:1px 6px; font-family:'Special Elite',monospace; font-size:14px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="teacherToggle" class="teacher-toggle" onclick="openTeacher()">🕵️ Teacher Tools</div>
+
+<script>
+/* =========================================================
+   CASE FILE: BRAD'S BAD DAY — WRS Substep 2.4B
+   Detective-themed head-to-head reading comprehension race
+   ========================================================= */
+
+/* ---------- FIREBASE CONFIG ----------
+   Create a NEW standalone Firebase project (console.firebase.google.com):
+   1. Add a Web App, copy the config object below.
+   2. Enable "Realtime Database" (test mode is fine for a classroom tool).
+   3. Paste your config into FIREBASE_CONFIG.
+   Until you do this, the game runs in LOCAL/OFFLINE mode automatically
+   (single device, pass-and-play) so you can preview it right away.
+--------------------------------------------------------- */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCKHXd7b4EYbH2hw6AWr062Th1cN020cs0",
+  authDomain: "brads-bad-day.firebaseapp.com",
+  databaseURL: "https://brads-bad-day-default-rtdb.firebaseio.com",
+  projectId: "brads-bad-day",
+  storageBucket: "brads-bad-day.firebasestorage.app",
+  messagingSenderId: "485219482921",
+  appId: "1:485219482921:web:c4cd49eef792195fd00b38"
+};
+const TEACHER_PIN = "2468";
+
+let FIREBASE_OK = false;
+let db = null;
+try{
+  if(!FIREBASE_CONFIG.apiKey.startsWith("PASTE")){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    FIREBASE_OK = true;
+  }
+}catch(e){ console.warn("Firebase not configured yet, running offline.", e); }
+
+/* ---------------- CONTENT ---------------- */
+const ROUNDS = [
+  { id:'vocab', tab:'Vocab', title:"Case File 1 — Vocabulary Clues", icon:'🔍',
+    intro:"Every good detective reads for clues hidden in context. Figure out what each word means the way Brad used it in the story.",
+    type:'mc', points:10,
+    questions:[
+      {context:`"Brad fell in the slush by his front step."`, prompt:'What does slush mean here?',
+        options:['Partly melted, wet snow','A pile of dry leaves','A patch of solid ice','A soft rug'], answer:0},
+      {context:`"He had to stand in the brisk, cold wind."`, prompt:'What does brisk mean here?',
+        options:['Warm and gentle','Sharp and biting','Loud and windy','Slow moving'], answer:1},
+      {context:`"Brad felt grim."`, prompt:'What does grim mean here?',
+        options:['Excited and hopeful','Proud and calm','Gloomy and unhappy','Confused'], answer:2},
+      {context:`"The day did drag."`, prompt:'What does drag mean here?',
+        options:['Move by slowly','End quickly','Get louder','Turn cold'], answer:0},
+      {context:`"If only he could have a swift trip back home!"`, prompt:'What does swift mean here?',
+        options:['Short','Fast','Safe','Crowded'], answer:1},
+      {context:`"It ran into a trench of mud!"`, prompt:'What does trench mean here?',
+        options:['A steep hill','A shallow puddle','A long, narrow ditch','A wooden bridge'], answer:2},
+      {context:`"Now he had to run with a limp."`, prompt:'What does limp mean here?',
+        options:['An uneven walk from an injury','A fast sprint','A big jump','A happy skip'], answer:0},
+      {context:`"He felt that a spell was cast on him."`, prompt:'What does cast mean here?',
+        options:['Removed','Broken','Put or thrown upon someone','Discovered'], answer:2},
+      {context:`"At last, Brad's shift came to an end."`, prompt:'What does shift mean here?',
+        options:['A kind of bus','A scheduled period of work','A store','A type of cab'], answer:1},
+      {context:`"How long could Brad's bad luck last?"`, prompt:'What does last mean here?',
+        options:['Stop right away','Begin','Continue','Disappear forever'], answer:2},
+    ]},
+  { id:'spelling', tab:'Spelling', title:"Case File 2 — Spelling Forensics", icon:'✏️',
+    intro:"A detective's notes have to be exact. Listen to each word and spell it correctly to file it as evidence.",
+    type:'spell', points:15,
+    questions:[
+      {word:'slush', sentence:'Brad fell in the slush.'},
+      {word:'front', sentence:'He fell by his front step.'},
+      {word:'brisk', sentence:'The wind was brisk and cold.'},
+      {word:'trench', sentence:'The bus got stuck in a trench of mud.'},
+      {word:'swift', sentence:'He hoped for a swift trip home.'},
+      {word:'grim', sentence:'Brad felt grim after such a bad day.'},
+      {word:'drag', sentence:'The long day did drag.'},
+      {word:'branch', sentence:'He cut his leg on a branch.'},
+      {word:'shift', sentence:'His shift finally came to an end.'},
+      {word:'flat', sentence:'The bus tire went flat.'},
+      {word:'spend', sentence:'She did not spend any cash.'},
+      {word:'cash', sentence:'She did not have the cash to spend.'},
+    ]},
+  { id:'structure', tab:'Structure', title:"Case File 3 — Structure Analysis", icon:'🧩',
+    intro:"Every word is a piece of evidence with structure. Mark the blends, digraphs, and sounds to crack the code.",
+    type:'mc', points:10,
+    questions:[
+      {context:'front', prompt:'Which letters form the beginning consonant blend?', options:['fr','on','nt','ro'], answer:0},
+      {context:'slush', prompt:'Which letters form the ending digraph?', options:['sl','us','sh','lu'], answer:2},
+      {context:'branch', prompt:'Which letters form the beginning blend?', options:['br','an','nc','ch'], answer:0},
+      {context:'branch', prompt:'Which letters form the ending digraph?', options:['an','ch','br','ra'], answer:1},
+      {context:'trench', prompt:'How many sounds are in this word? (tr / e / n / ch)', options:['4','5','6','3'], answer:1},
+      {context:'brisk', prompt:'How many sounds are in this word? (b / r / i / s / k)', options:['3','4','5','6'], answer:2},
+      {context:'swift', prompt:'Which letters form the beginning blend?', options:['sw','if','ft','wi'], answer:0},
+      {context:'grim', prompt:'Which letters form the beginning blend?', options:['gr','ri','im','mi'], answer:0},
+      {context:'shift', prompt:'Which letters form the beginning digraph?', options:['sh','if','ft','hi'], answer:0},
+      {context:'spend', prompt:'Which letters form the beginning blend?', options:['sp','en','nd','pe'], answer:0},
+    ]},
+  { id:'sequence', tab:'Timeline', title:"Case File 4 — Timeline Reconstruction", icon:'🗺️',
+    intro:"Drag the evidence into the correct order to rebuild Brad's timeline.",
+    type:'sequence', points:5,
+    sets:[
+      { label:'Morning — put these in order', events:[
+          "Brad fell in the slush by his front step.",
+          "Brad cut his leg on a branch while rushing to the bus.",
+          "The bus drove past Brad's stop.",
+          "Brad called a cab and waited in the cold wind.",
+      ]},
+      { label:'Afternoon — put these in order', events:[
+          "Brad finally got to his job at the print shop.",
+          "Brad helped a gal who did not buy anything.",
+          "Brad's shift ended and he went to catch the bus.",
+          "The bus got a flat tire in a trench of mud.",
+      ]},
+    ]},
+  { id:'inference', tab:'Inference', title:"Case File 5 — Detective Inference", icon:'🧠',
+    intro:"The best clues aren't always written in the text. Read between the lines to solve these.",
+    type:'mc', points:12,
+    questions:[
+      {context:`Brad "kept his chin up" after falling in the slush.`, prompt:'What does this tell you about Brad?',
+        options:['He didn\'t notice he fell','He was trying to stay positive despite the bad start','He was looking for something in the snow','He was checking the weather'], answer:1},
+      {context:`When the bus drove past his stop, Brad said "What is going on?"`, prompt:'Why did he say this?',
+        options:['He was excited','He was confused and frustrated by his bad luck','He wanted directions','He was talking to a friend'], answer:1},
+      {context:`Brad "helped a gal, but she did not get her cash out to spend."`, prompt:'What can you infer about the gal?',
+        options:['She bought several prints','She was Brad\'s boss','She looked at prints but did not end up buying','She worked at the shop too'], answer:2},
+      {context:`"The day did drag."`, prompt:'Why did the day drag for Brad?',
+        options:['Because he was very busy','Because business was slow and time felt like it was moving slowly','Because the shop closed early','Because he took a long lunch'], answer:1},
+      {context:`Brad "felt that a spell was cast on him."`, prompt:'What does this tell you about how Brad saw his day?',
+        options:['He believes someone tricked him on purpose','He is describing how unlucky and cursed the whole day felt','He is talking about a magic show he saw','He thinks he is dreaming'], answer:1},
+      {context:'Think about the whole story.', prompt:'How would you describe Brad\'s mood by the end?',
+        options:['Thrilled and proud','Worn out and frustrated, but still hopeful','Angry and ready to quit','Calm and unaffected'], answer:1},
+      {context:'"The cab did not come for a long time. It got lost on its way to get Brad."', prompt:'Why might the cab have taken so long?',
+        options:['Brad called too late','It got lost trying to find Brad','There were no cabs available','Brad changed the location'], answer:1},
+      {context:'"At last, Brad got to his job at the shop where he sold prints."', prompt:'What kind of job does Brad have?',
+        options:['He drives a bus','He sells prints at a shop','He fixes cars','He works at a cab company'], answer:1},
+      {context:'Think about everything that happened to Brad.', prompt:'What is one lesson or theme this story teaches?',
+        options:['Bad luck follows you forever','It\'s best to give up when things go wrong','You can stay hopeful even when a lot goes wrong','Never take the bus'], answer:2},
+      {context:'"The next day had to be better."', prompt:'Why might the author end the story this way?',
+        options:['To show Brad giving up','To show Brad\'s hope that things will improve','To hint at more bad luck coming','To end the story with a joke'], answer:1},
+    ]},
+];
+
+/* ---------------- STATE ---------------- */
+let S = {
+  screen:'welcome',
+  mode:null,          // 'host' | 'join' | 'offline'
+  code:null,
+  playerSlot:null,    // 1 or 2
+  name:'',
+  roundIdx:0,
+  qIdx:0,
+  score:0,
+  seqSetIdx:0,
+  seqOrder:[],
+  qStartTime:0,
+  finished:false,
+  finishTime:null,
+  opponent:{name:'Detective 2', score:0, roundIdx:0, finished:false},
+  unsub:null,
+};
+
+function totalQuestionsInRound(r){
+  if(r.type==='sequence') return r.sets.length;
+  return r.questions.length;
+}
+function overallProgressPct(roundIdx, qIdx){
+  let done=0, total=0;
+  ROUNDS.forEach((r,i)=>{
+    const n = totalQuestionsInRound(r);
+    total += n;
+    if(i<roundIdx) done += n;
+    else if(i===roundIdx) done += qIdx;
+  });
+  return Math.round(100*done/total);
+}
+
+/* ---------------- FIREBASE SYNC ---------------- */
+function syncSelf(){
+  if(!FIREBASE_OK || !S.code) return;
+  db.ref(`sessions/${S.code}/players/${S.playerSlot}`).update({
+    name:S.name, score:S.score, roundIdx:S.roundIdx, qIdx:S.qIdx,
+    progress:overallProgressPct(S.roundIdx,S.qIdx),
+    finished:S.finished, finishTime:S.finishTime||null,
+    updatedAt: Date.now()
+  });
+}
+function listenOpponent(){
+  if(!FIREBASE_OK || !S.code) return;
+  const otherSlot = S.playerSlot===1?2:1;
+  db.ref(`sessions/${S.code}/players/${otherSlot}`).on('value', snap=>{
+    const v = snap.val();
+    if(v){ S.opponent = v; render(); }
+  });
+}
+function makeCode(){
+  const letters='ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let c=''; for(let i=0;i<4;i++) c+=letters[Math.floor(Math.random()*letters.length)];
+  return c;
+}
+
+/* ---------------- RENDER HELPERS ---------------- */
+const app = document.getElementById('app');
+function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild; }
+
+function corkboardHTML(){
+  return `<div class="corkboard">
+    ${ROUNDS.map((r,i)=>`
+      <div class="tab ${i===S.roundIdx?'active':''} ${i<S.roundIdx?'done':''}">
+        ${i<S.roundIdx?'<span class="stamp">✅</span>':''}
+        <div>${r.icon}</div>
+        <div>${r.tab}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function raceBarHTML(){
+  const myPct = overallProgressPct(S.roundIdx, S.qIdx);
+  const oppPct = S.opponent.progress || 0;
+  return `<div class="race-bar">
+    <div class="race-card">
+      <div class="name"><span>🕵️ ${S.name||'You'}</span><span class="score">${S.score} pts</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${myPct}%"></div></div>
+    </div>
+    <div class="race-card">
+      <div class="name"><span>🕵️ ${S.opponent.name||'Detective 2'} ${S.opponent.finished?'🏁':''}</span><span class="score">${S.opponent.score||0} pts</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${oppPct}%"></div></div>
+    </div>
+  </div>`;
+}
+
+function masthead(){
+  return `<div class="masthead">
+    <div class="badge">WRS · SUBSTEP 2.4B · DETECTIVE DIVISION</div>
+    <h1 class="type">Case File: Brad's Bad Day</h1>
+    <p>Two detectives. One case. Race to close the file.</p>
+  </div>`;
+}
+
+function stamp(kind){
+  const s = el(`<div class="stamp-fx ${kind}">${kind==='correct'?'CASE CRACKED':'COLD CASE'}</div>`);
+  document.body.appendChild(s);
+  requestAnimationFrame(()=>s.classList.add('show'));
+  setTimeout(()=>s.remove(), 900);
+}
+
+/* ---------------- SCREENS ---------------- */
+function render(){
+  app.innerHTML='';
+  if(S.screen==='welcome') return renderWelcome();
+  if(S.screen==='lobby') return renderLobby();
+  if(S.screen==='roundIntro') return renderRoundIntro();
+  if(S.screen==='question') return renderQuestion();
+  if(S.screen==='finished') return renderFinished();
+}
+
+function renderWelcome(){
+  app.appendChild(el(masthead()));
+  const offlineNote = FIREBASE_OK ? '' : `<p class="small">⚠️ Firebase isn't connected yet, so this preview runs in local pass-and-play mode. Add your Firebase config in the code to enable real cross-device racing.</p>`;
+  app.appendChild(el(`
+    <div class="panel">
+      <h2>🕵️ Detective Sign-In</h2>
+      ${offlineNote}
+      <label class="small">Your detective name</label>
+      <input id="nameInput" type="text" placeholder="e.g. Detective Rivera" />
+      <div class="row">
+        <button class="btn" id="hostBtn">Start New Case (Player 1)</button>
+        <button class="btn ghost" id="joinBtn">Join a Case (Player 2)</button>
+      </div>
+      <div id="joinRow" style="display:none; margin-top:12px;">
+        <label class="small">Case code from Player 1</label>
+        <input id="codeInput" type="text" maxlength="4" placeholder="ABCD" style="text-transform:uppercase;" />
+        <button class="btn" id="joinGoBtn">Join Case</button>
+      </div>
+      <p class="small" style="margin-top:16px;">Estimated case time: 50+ minutes across 5 case files (vocabulary, spelling, word structure, timeline, and inference).</p>
+    </div>
+  `));
+  document.getElementById('hostBtn').onclick=()=>startAsHost();
+  document.getElementById('joinBtn').onclick=()=>{ document.getElementById('joinRow').style.display='block'; };
+  document.getElementById('joinGoBtn').onclick=()=>joinCase();
+}
+
+function startAsHost(){
+  const name = document.getElementById('nameInput').value.trim() || 'Detective 1';
+  S.name=name; S.playerSlot=1; S.mode = FIREBASE_OK ? 'host' : 'offline';
+  if(FIREBASE_OK){
+    S.code = makeCode();
+    db.ref(`sessions/${S.code}`).set({created:Date.now()});
+    syncSelf();
+    listenOpponent();
+    S.screen='lobby';
+  } else {
+    S.code = 'LOCAL';
+    S.screen='roundIntro';
+  }
+  render();
+}
+function joinCase(){
+  const name = document.getElementById('nameInput')?.value.trim() || 'Detective 2';
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if(!code){ alert('Enter the 4-letter case code from Player 1.'); return; }
+  S.name=name; S.playerSlot=2; S.mode='join'; S.code=code;
+  syncSelf();
+  listenOpponent();
+  S.screen='roundIntro';
+  render();
+}
+
+function renderLobby(){
+  app.appendChild(el(masthead()));
+  app.appendChild(el(`
+    <div class="panel center">
+      <h2>📋 Case Opened</h2>
+      <p>Share this case code with your partner detective:</p>
+      <div class="wsc" style="font-size:28px; padding:8px 20px;">${S.code}</div>
+      <p class="small" style="margin-top:16px;">Waiting for Detective 2 to join... you can start the case now — they'll join in progress.</p>
+      <button class="btn" id="beginBtn" style="margin-top:10px;">Begin Investigation</button>
+    </div>
+  `));
+  document.getElementById('beginBtn').onclick=()=>{ S.screen='roundIntro'; render(); };
+}
+
+function renderRoundIntro(){
+  const r = ROUNDS[S.roundIdx];
+  app.appendChild(el(masthead()));
+  app.appendChild(el(corkboardHTML()));
+  app.appendChild(el(raceBarHTML()));
+  app.appendChild(el(`
+    <div class="panel center">
+      <h2>${r.icon} ${r.title}</h2>
+      <p>${r.intro}</p>
+      <button class="btn" id="startRoundBtn">Open Case File</button>
+    </div>
+  `));
+  document.getElementById('startRoundBtn').onclick=()=>{
+    S.qIdx=0; S.seqSetIdx=0;
+    S.screen='question';
+    S.qStartTime=Date.now();
+    render();
+  };
+}
+
+function renderQuestion(){
+  const r = ROUNDS[S.roundIdx];
+  app.appendChild(el(masthead()));
+  app.appendChild(el(corkboardHTML()));
+  app.appendChild(el(raceBarHTML()));
+
+  if(r.type==='mc') return renderMC(r);
+  if(r.type==='spell') return renderSpell(r);
+  if(r.type==='sequence') return renderSequence(r);
+}
+
+function timeBonus(){
+  const elapsedSec = (Date.now()-S.qStartTime)/1000;
+  return Math.max(0, Math.round((20-elapsedSec)/20*5));
+}
+
+function renderMC(r){
+  const q = r.questions[S.qIdx];
+  const panel = el(`
+    <div class="panel">
+      <h2>${r.icon} ${r.title}</h2>
+      <p class="small">Question ${S.qIdx+1} of ${r.questions.length}</p>
+      ${q.context?`<div class="clue-quote">${q.context}</div>`:''}
+      <div class="question-prompt">${q.prompt}</div>
+      <div class="options">
+        ${q.options.map((o,i)=>`<button class="opt-btn" data-i="${i}">${o}</button>`).join('')}
+      </div>
+    </div>
+  `);
+  app.appendChild(panel);
+  panel.querySelectorAll('.opt-btn').forEach(btn=>{
+    btn.onclick=()=>{
+      const i = parseInt(btn.dataset.i);
+      panel.querySelectorAll('.opt-btn').forEach(b=>b.disabled=true);
+      if(i===q.answer){
+        btn.classList.add('correct');
+        S.score += r.points + timeBonus();
+        stamp('correct');
+      } else {
+        btn.classList.add('wrong');
+        panel.querySelectorAll('.opt-btn')[q.answer].classList.add('correct');
+        stamp('wrong');
+      }
+      syncSelf();
+      setTimeout(()=>advanceQuestion(r), 1000);
+    };
+  });
+}
+
+function renderSpell(r){
+  const q = r.questions[S.qIdx];
+  const panel = el(`
+    <div class="panel">
+      <h2>${r.icon} ${r.title}</h2>
+      <p class="small">Word ${S.qIdx+1} of ${r.questions.length}</p>
+      <p>Tap to hear the word and its sentence, then spell it below.</p>
+      <div class="center"><button class="spell-word-btn" id="hearBtn">🔊 Hear the word</button></div>
+      <input class="spell-input" id="spellInput" type="text" placeholder="type the word..." autocomplete="off" />
+      <div class="center"><button class="btn" id="submitSpell">File Evidence</button></div>
+    </div>
+  `);
+  app.appendChild(panel);
+  const speak = (text)=>{
+    if('speechSynthesis' in window){
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate=0.85;
+      window.speechSynthesis.speak(u);
+    }
+  };
+  document.getElementById('hearBtn').onclick=()=>{
+    speak(q.word);
+    setTimeout(()=>speak(q.sentence), 900);
+    setTimeout(()=>speak(q.word), 2600);
+  };
+  document.getElementById('submitSpell').onclick=()=>{
+    const val = document.getElementById('spellInput').value.trim().toLowerCase();
+    const input = document.getElementById('spellInput');
+    input.disabled=true; document.getElementById('submitSpell').disabled=true;
+    if(val===q.word.toLowerCase()){
+      S.score += r.points + timeBonus();
+      stamp('correct');
+    } else {
+      stamp('wrong');
+      input.value = `${val || '(blank)'} → correct: ${q.word}`;
+    }
+    syncSelf();
+    setTimeout(()=>advanceQuestion(r), 1200);
+  };
+}
+
+function renderSequence(r){
+  const set = r.sets[S.seqSetIdx];
+  if(!S.seqOrder.length || S.seqOrder.length!==set.events.length){
+    S.seqOrder = set.events.map((e,i)=>({text:e, correctPos:i})).sort(()=>Math.random()-0.5);
+  }
+  const panel = el(`
+    <div class="panel">
+      <h2>${r.icon} ${r.title}</h2>
+      <p class="small">Timeline ${S.seqSetIdx+1} of ${r.sets.length}</p>
+      <div class="question-prompt">${set.label}</div>
+      <ul class="seq-list" id="seqList"></ul>
+      <div class="center"><button class="btn" id="lockBtn">Lock In Timeline</button></div>
+    </div>
+  `);
+  app.appendChild(panel);
+  const list = panel.querySelector('#seqList');
+  function drawList(){
+    list.innerHTML='';
+    S.seqOrder.forEach((item,idx)=>{
+      const li = el(`<li class="seq-item" draggable="true" data-idx="${idx}"><span class="num">${idx+1}</span><span>${item.text}</span></li>`);
+      list.appendChild(li);
+    });
+    attachDrag();
+  }
+  function attachDrag(){
+    let dragIdx=null;
+    list.querySelectorAll('.seq-item').forEach(li=>{
+      li.addEventListener('dragstart', e=>{ dragIdx=parseInt(li.dataset.idx); li.classList.add('dragging'); });
+      li.addEventListener('dragend', ()=> li.classList.remove('dragging'));
+      li.addEventListener('dragover', e=> e.preventDefault());
+      li.addEventListener('drop', e=>{
+        e.preventDefault();
+        const dropIdx = parseInt(li.dataset.idx);
+        const moved = S.seqOrder.splice(dragIdx,1)[0];
+        S.seqOrder.splice(dropIdx,0,moved);
+        drawList();
+      });
+    });
+  }
+  drawList();
+  panel.querySelector('#lockBtn').onclick=()=>{
+    let correctCount=0;
+    S.seqOrder.forEach((item,idx)=>{ if(item.correctPos===idx) correctCount++; });
+    S.score += correctCount * r.points;
+    if(correctCount===set.events.length) stamp('correct'); else stamp('wrong');
+    syncSelf();
+    S.seqOrder=[];
+    S.seqSetIdx++;
+    setTimeout(()=>{
+      if(S.seqSetIdx>=r.sets.length){ nextRound(); }
+      else { S.qStartTime=Date.now(); render(); }
+    }, 1200);
+  };
+}
+
+function advanceQuestion(r){
+  S.qIdx++;
+  S.qStartTime=Date.now();
+  if(S.qIdx>=r.questions.length){ nextRound(); }
+  else { render(); }
+}
+
+function nextRound(){
+  S.roundIdx++;
+  S.qIdx=0;
+  if(S.roundIdx>=ROUNDS.length){
+    S.finished=true;
+    S.finishTime = Date.now();
+    S.screen='finished';
+    syncSelf();
+  } else {
+    S.screen='roundIntro';
+    syncSelf();
+  }
+  render();
+}
+
+function renderFinished(){
+  app.appendChild(el(masthead()));
+  app.appendChild(el(`
+    <div class="panel center">
+      <h2>🗂️ Case Closed</h2>
+      <p>You solved every case file. Final score locked in.</p>
+    </div>
+  `));
+  app.appendChild(el(`
+    <div class="final-board">
+      <div class="final-card">
+        <div>🕵️ ${S.name}</div>
+        <div class="big">${S.score}</div>
+        <div class="small">points</div>
+        ${S.finished?'<div class="small">🏁 Finished</div>':''}
+      </div>
+      <div class="final-card">
+        <div>🕵️ ${S.opponent.name||'Detective 2'}</div>
+        <div class="big">${S.opponent.score||0}</div>
+        <div class="small">points</div>
+        ${S.opponent.finished?'<div class="small">🏁 Finished</div>':'<div class="small">still investigating...</div>'}
+      </div>
+    </div>
+  `));
+}
+
+/* ---------------- TEACHER TOOLS ---------------- */
+function openTeacher(){
+  const pin = prompt('Teacher PIN:');
+  if(pin!==TEACHER_PIN){ if(pin!==null) alert('Incorrect PIN.'); return; }
+  const bg = el(`<div class="modal-bg"><div class="modal">
+    <h2 class="type">🕵️ Teacher Tools</h2>
+    <p class="small">Firebase status: ${FIREBASE_OK?'Connected ✅':'Not connected — offline mode ⚠️'}</p>
+    <p class="small">Current session code: <b>${S.code||'none yet'}</b></p>
+    <p class="small">Player 1 (you if hosting): ${S.name} — ${S.score} pts</p>
+    <p class="small">Opponent synced: ${S.opponent.name} — ${S.opponent.score||0} pts</p>
+    <hr>
+    <p class="small"><b>Answer key</b> — all correct answers are index 0-based option order or the target spelling word, listed in the ROUNDS data at the top of the script for quick reference during discussion.</p>
+    <p class="small"><b>Pacing tip:</b> pause between each Case File for 3-5 minutes of verbal discussion/review to comfortably stretch this to 50+ minutes.</p>
+    <button class="btn" id="resetBtn">Reset My Progress</button>
+    <button class="btn ghost" id="closeTeacher">Close</button>
+  </div></div>`);
+  document.body.appendChild(bg);
+  document.getElementById('closeTeacher').onclick=()=>bg.remove();
+  document.getElementById('resetBtn').onclick=()=>{
+    S.roundIdx=0; S.qIdx=0; S.score=0; S.seqSetIdx=0; S.seqOrder=[]; S.finished=false;
+    S.screen='roundIntro'; syncSelf(); bg.remove(); render();
+  };
+}
+
+render();
+</script>
+</body>
+</html>
