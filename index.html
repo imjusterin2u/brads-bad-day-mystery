@@ -538,10 +538,14 @@ function renderWelcome(){
       </div>
       <p class="small" style="margin-top:16px;">Estimated case time: 50+ minutes across 5 case files (vocabulary, spelling, word structure, timeline, and inference).</p>
     </div>
+    <div class="center" style="margin-top:16px;">
+      <button class="btn ghost" id="teacherBtnInline">🕵️ Teacher Tools</button>
+    </div>
   `));
   document.getElementById('hostBtn').onclick=()=>startAsHost();
   document.getElementById('joinBtn').onclick=()=>{ document.getElementById('joinRow').style.display='block'; };
   document.getElementById('joinGoBtn').onclick=()=>joinCase();
+  document.getElementById('teacherBtnInline').onclick=()=>openTeacher();
 }
 
 function startAsHost(){
