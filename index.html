@@ -585,9 +585,14 @@ let S = {
   qStartTime:0,
   finished:false,
   finishTime:null,
+  answerLog:[], // [{roundTab, item, correct, attempts, points}] — every scored question, in order
   opponent:{name:'Detective 2', score:0, roundIdx:0, finished:false},
   unsub:null,
 };
+
+function logAnswer(entry){
+  S.answerLog.push(entry);
+}
 
 function totalQuestionsInRound(r){
   if(r.type==='sequence') return r.sets.length;
@@ -611,6 +616,7 @@ function syncSelf(){
     name:S.name, score:S.score, roundIdx:S.roundIdx, qIdx:S.qIdx,
     progress:overallProgressPct(S.roundIdx,S.qIdx),
     finished:S.finished, finishTime:S.finishTime||null,
+    answerLog:S.answerLog,
     updatedAt: Date.now()
   });
 }
@@ -1038,6 +1044,7 @@ function renderMC(r){
         panel.querySelectorAll('.opt-btn')[correctDisplayPos].classList.add('correct');
         stamp('wrong');
       }
+      logAnswer({roundTab:r.tab, item:q.prompt, correct:isCorrect, attempts:attempt, points:earned});
       syncSelf();
       const box = el(`
         <div class="explain-box ${isCorrect?'ok':'no'}">
@@ -1452,6 +1459,7 @@ function renderSpell(r){
       } else {
         stamp('wrong');
       }
+      logAnswer({roundTab:r.tab, item:q.word, correct:wasCorrect, attempts:spellAttempt, points:earned});
       syncSelf();
       const box = el(`
         <div class="explain-box ${wasCorrect?'ok':'no'}">
@@ -1645,6 +1653,7 @@ function renderSequence(r){
     const earned = correctCount * r.points;
     S.score += earned;
     if(allCorrect) stamp('correct'); else stamp('wrong');
+    logAnswer({roundTab:r.tab, item:set.label, correct:allCorrect, attempts:attemptCount, points:earned, partial:`${correctCount}/${set.events.length}`});
     syncSelf();
     lockBtn.disabled=true;
     const correctList = set.events.map((e,idx)=>`<li class="seq-item"><span class="num">${idx+1}</span><span>${e}</span></li>`).join('');
@@ -1741,6 +1750,8 @@ function openTeacher(){
     <select id="voiceSelect" style="width:100%; padding:9px; border-radius:6px; border:2px solid var(--paper-line); font-family:'Libre Franklin',sans-serif; margin-bottom:8px;"></select>
     <button class="btn ghost" id="testVoiceBtn">🔊 Test Voice</button>
     <hr>
+    <button class="btn" id="printReportBtn">🖨️ Print Report</button>
+    <hr>
     <button class="btn" id="resetBtn">Reset My Progress</button>
     <button class="btn ghost" id="changePinBtn">Change PIN</button>
     <button class="btn ghost" id="closeTeacher">Close</button>
@@ -1754,6 +1765,7 @@ function openTeacher(){
     window.speechSynthesis.cancel();
     speakText('The brisk, cold wind blew past the front step.', 0.85);
   };
+  document.getElementById('printReportBtn').onclick = printReport;
   document.getElementById('changePinBtn').onclick=()=>{
     const newPin = prompt('Enter a new teacher PIN (4+ digits):');
     if(newPin && newPin.trim().length>=4){ setTeacherPin(newPin.trim()); alert('PIN updated.'); }
@@ -1761,9 +1773,64 @@ function openTeacher(){
   };
   document.getElementById('closeTeacher').onclick=()=>bg.remove();
   document.getElementById('resetBtn').onclick=()=>{
-    S.roundIdx=0; S.qIdx=0; S.score=0; S.seqSetIdx=0; S.seqOrder=[]; S.finished=false;
+    S.roundIdx=0; S.qIdx=0; S.score=0; S.seqSetIdx=0; S.seqOrder=[]; S.finished=false; S.answerLog=[];
     S.screen='roundIntro'; syncSelf(); bg.remove(); render();
   };
+}
+
+function reportSection(playerName, score, log){
+  if(!log || !log.length){
+    return `<h3>${playerName}</h3><p class="empty">No answers recorded yet for this session.</p>`;
+  }
+  const missed = log.filter(a=>!a.correct);
+  const rows = log.map(a=>`
+    <tr class="${a.correct?'ok':'no'}">
+      <td>${a.roundTab}</td>
+      <td>${a.item}</td>
+      <td>${a.correct?'✅ Correct':'❌ Missed'}</td>
+      <td>${a.attempts||1}</td>
+      <td>${a.partial?a.partial:''}</td>
+      <td>${a.points}</td>
+    </tr>`).join('');
+  const missedList = missed.length
+    ? `<p><b>Missed items to review:</b> ${missed.map(a=>`${a.item} (${a.roundTab})`).join(', ')}</p>`
+    : `<p><b>Missed items to review:</b> none — everything correct.</p>`;
+  return `
+    <h3>${playerName} — ${score} pts total</h3>
+    ${missedList}
+    <table>
+      <thead><tr><th>Case File</th><th>Item</th><th>Result</th><th>Attempts</th><th>Order</th><th>Points</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function printReport(){
+  const win = window.open('', '_blank');
+  if(!win){ alert('Your browser blocked the print window — please allow pop-ups for this site.'); return; }
+  const dateStr = new Date().toLocaleDateString(undefined, {year:'numeric', month:'long', day:'numeric'});
+  const html = `<!DOCTYPE html><html><head><title>Case Report — ${CURRENT_STORY_TITLE}</title>
+    <style>
+      body{font-family:Georgia,serif; color:#222; max-width:760px; margin:30px auto; padding:0 20px;}
+      h1{font-size:22px; margin-bottom:2px;}
+      h2{font-size:14px; font-weight:normal; color:#555; margin-top:0;}
+      h3{font-size:16px; border-bottom:2px solid #333; padding-bottom:4px; margin-top:32px;}
+      table{width:100%; border-collapse:collapse; margin-top:10px; font-size:13px;}
+      th,td{border:1px solid #ccc; padding:6px 8px; text-align:left;}
+      th{background:#f0f0f0;}
+      tr.no{background:#fdecea;}
+      tr.ok{background:#eafaf0;}
+      .empty{color:#777; font-style:italic;}
+      @media print{ body{margin:0; padding:0 10px;} }
+    </style></head><body>
+    <h1>Case Report: ${CURRENT_STORY_TITLE}</h1>
+    <h2>WRS Substep ${CURRENT_STORY_SUBSTEP} · Printed ${dateStr}</h2>
+    ${reportSection(S.name||'Detective 1', S.score, S.answerLog)}
+    ${S.opponent && (S.opponent.answerLog||[]).length ? reportSection(S.opponent.name||'Detective 2', S.opponent.score||0, S.opponent.answerLog) : ''}
+  </body></html>`;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>win.print(), 400);
 }
 
 render();
